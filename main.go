@@ -1,5 +1,11 @@
-// SpiceFix - install, repair and update Spicetify on Windows.
-// Build: GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" -o SpiceFix.exe
+// SpiceFix - install, repair and update Spicetify on Windows and Linux.
+//
+// Build:
+//
+//	GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" -o SpiceFix.exe
+//	GOOS=linux   GOARCH=amd64 go build -ldflags "-s -w" -o SpiceFix-linux-amd64
+//
+// Platform-specific parts live in platform_windows.go and platform_linux.go.
 package main
 
 import (
@@ -10,15 +16,13 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 )
 
 const (
-	cliInstallURL         = "https://raw.githubusercontent.com/spicetify/cli/main/install.ps1"
-	marketplaceInstallURL = "https://raw.githubusercontent.com/spicetify/marketplace/main/resources/install.ps1"
-	latestReleaseAPI      = "https://api.github.com/repos/spicetify/cli/releases/latest"
+	latestReleaseAPI = "https://api.github.com/repos/spicetify/cli/releases/latest"
+	repoRaw          = "https://raw.githubusercontent.com/spicetify"
 )
 
 var in = bufio.NewReader(os.Stdin)
@@ -88,7 +92,7 @@ func main() {
 		fmt.Println()
 		if err != nil {
 			fail(err.Error())
-			fmt.Println(dim("  Tip: try option [6] Deep fix, or reinstall Spotify from spotify.com and run [2]."))
+			fmt.Println(dim("  Tip: try option [6] Deep fix, or reinstall Spotify and run [2]."))
 		} else {
 			ok("Done! Spotify should now open with Spicetify.")
 		}
@@ -117,14 +121,13 @@ func install() error {
 	closeSpotify()
 	step("Running the official Spicetify installer…")
 	fmt.Println(dim("  (It may ask whether to install Marketplace – answer Y or N.)"))
-	if err := runPS(fmt.Sprintf("iwr -useb '%s' | iex", cliInstallURL)); err != nil {
+	if err := runInstaller("cli/main/install"); err != nil {
 		return fmt.Errorf("installer failed: %w", err)
 	}
 	exe := findSpicetify()
 	if exe == "" {
-		return errors.New("installer finished but spicetify.exe was not found")
+		return errors.New("installer finished but the spicetify program was not found")
 	}
-	// Make sure it's actually applied.
 	return fix(exe)
 }
 
@@ -133,6 +136,9 @@ func fix(exe string) error {
 		return errors.New("Spicetify is not installed – choose [2] first")
 	}
 	closeSpotify()
+	if err := prepareApply(exe); err != nil {
+		return err
+	}
 	step("Restoring backup and re-applying Spicetify…")
 	if err := run(exe, "restore", "backup", "apply"); err == nil {
 		return nil
@@ -149,6 +155,9 @@ func deepFix(exe string) error {
 		return errors.New("Spicetify is not installed – choose [2] first")
 	}
 	closeSpotify()
+	if err := prepareApply(exe); err != nil {
+		return err
+	}
 	step("Deep fix: clearing old backup…")
 	_ = run(exe, "restore")
 	_ = runInput(exe, "y\n", "clear")
@@ -164,11 +173,16 @@ func update(exe string) error {
 		step("Spicetify isn't installed – installing the latest version instead.")
 		return install()
 	}
+	if managedByPackage(exe) {
+		warn("Spicetify was installed by your package manager (" + exe + ").")
+		fmt.Println("  Update it the same way (e.g. 'yay -Syu spicetify-cli'), then choose [3] Fix.")
+		return fix(exe)
+	}
 	closeSpotify()
 	step("Updating Spicetify CLI…")
 	if err := run(exe, "upgrade"); err != nil {
 		warn("'spicetify upgrade' failed – reinstalling with the official installer.")
-		if err := runPS(fmt.Sprintf("iwr -useb '%s' | iex", cliInstallURL)); err != nil {
+		if err := runInstaller("cli/main/install"); err != nil {
 			return fmt.Errorf("update failed: %w", err)
 		}
 		exe = findSpicetify()
@@ -177,53 +191,22 @@ func update(exe string) error {
 }
 
 func installMarketplace() error {
-	if findSpicetify() == "" {
+	exe := findSpicetify()
+	if exe == "" {
 		return errors.New("Spicetify is not installed – choose [2] first")
 	}
 	closeSpotify()
+	if err := prepareApply(exe); err != nil {
+		return err
+	}
 	step("Installing Spicetify Marketplace…")
-	if err := runPS(fmt.Sprintf("iwr -useb '%s' | iex", marketplaceInstallURL)); err != nil {
+	if err := runInstaller("marketplace/main/resources/install"); err != nil {
 		return fmt.Errorf("marketplace install failed: %w", err)
 	}
 	return nil
 }
 
-// ---------- detection ----------
-
-func checkSpotify() bool {
-	// Microsoft Store Spotify isn't supported by Spicetify.
-	out, _ := exec.Command("powershell", "-NoProfile", "-Command",
-		"(Get-AppxPackage -Name SpotifyAB.SpotifyMusic).Name").Output()
-	if strings.TrimSpace(string(out)) != "" {
-		fail("You have the Microsoft Store version of Spotify, which Spicetify can't modify.")
-		fmt.Println("  Uninstall it, install Spotify from https://www.spotify.com/download/windows/,")
-		fmt.Println("  open it once and log in, then run this app again.")
-		return false
-	}
-	spotify := filepath.Join(os.Getenv("APPDATA"), "Spotify", "Spotify.exe")
-	if _, err := os.Stat(spotify); err != nil {
-		warn("Spotify desktop wasn't found at " + spotify)
-		fmt.Println("  Install it from https://www.spotify.com/download/windows/ and open it once.")
-		return strings.ToLower(ask("  Continue anyway? (y/n)", "n")) == "y"
-	}
-	return true
-}
-
-func findSpicetify() string {
-	candidates := []string{
-		filepath.Join(os.Getenv("LOCALAPPDATA"), "spicetify", "spicetify.exe"),
-		filepath.Join(os.Getenv("USERPROFILE"), "spicetify-cli", "spicetify.exe"),
-	}
-	for _, c := range candidates {
-		if _, err := os.Stat(c); err == nil {
-			return c
-		}
-	}
-	if p, err := exec.LookPath("spicetify"); err == nil {
-		return p
-	}
-	return ""
-}
+// ---------- shared helpers ----------
 
 func spicetifyVersion(exe string) string {
 	out, err := exec.Command(exe, "-v").Output()
@@ -253,16 +236,7 @@ func latestVersion() string {
 
 func normalize(v string) string { return strings.TrimPrefix(strings.TrimSpace(v), "v") }
 
-// ---------- process helpers ----------
-
-func closeSpotify() {
-	_ = exec.Command("taskkill", "/F", "/IM", "Spotify.exe").Run()
-	time.Sleep(800 * time.Millisecond)
-}
-
-func run(exe string, args ...string) error {
-	return runInput(exe, "", args...)
-}
+func run(exe string, args ...string) error { return runInput(exe, "", args...) }
 
 func runInput(exe, input string, args ...string) error {
 	fmt.Println(dim("  > spicetify " + strings.Join(args, " ")))
@@ -276,9 +250,9 @@ func runInput(exe, input string, args ...string) error {
 	return cmd.Run()
 }
 
-func runPS(script string) error {
-	cmd := exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
-		"[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; "+script)
+// passthrough runs a command attached to the terminal.
+func passthrough(name string, args ...string) error {
+	cmd := exec.Command(name, args...)
 	cmd.Stdout, cmd.Stderr, cmd.Stdin = os.Stdout, os.Stderr, os.Stdin
 	return cmd.Run()
 }
@@ -303,6 +277,10 @@ func ask(prompt, def string) string {
 		return def
 	}
 	return s
+}
+
+func confirm(prompt string) bool {
+	return strings.ToLower(ask(prompt+" (y/n)", "y")) == "y"
 }
 
 func pause() {

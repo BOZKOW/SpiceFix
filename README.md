@@ -1,12 +1,12 @@
 # SpiceFix
 
-A small Windows app that **installs, fixes and updates [Spicetify](https://spicetify.app)** with one click.
+A small app for **Windows and Linux** that **installs, fixes and updates [Spicetify](https://spicetify.app)** with one click.
 
-![platform](https://img.shields.io/badge/platform-Windows-blue) ![go](https://img.shields.io/badge/built%20with-Go-00ADD8)
+![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue) ![go](https://img.shields.io/badge/built%20with-Go-00ADD8)
 
 ## What it does
 
-When you open it, SpiceFix shows whether Spicetify is installed, which version you have and the latest release, then lets you pick:
+When you open it, SpiceFix finds your Spotify install, shows whether Spicetify is installed, which version you have and the latest release, then lets you pick:
 
 | Option | What happens |
 |---|---|
@@ -17,31 +17,63 @@ When you open it, SpiceFix shows whether Spicetify is installed, which version y
 | **5. Marketplace** | Installs or repairs Spicetify Marketplace |
 | **6. Deep fix** | Clears the old backup and applies from scratch – for a blank Spotify |
 
-It also warns you if you have the **Microsoft Store** version of Spotify, which Spicetify can't modify.
-
 ## Download
 
-Grab `SpiceFix.exe` from the [Releases](../../releases) page.
+Get the right file from the [Releases](../../releases) page:
 
-> The exe isn't code-signed, so Windows SmartScreen may warn you. Click **More info → Run anyway**.
+| System | File |
+|---|---|
+| Windows (64-bit) | `SpiceFix.exe` |
+| Linux (most PCs) | `SpiceFix-linux-amd64` |
+| Linux on ARM (Raspberry Pi 4/5, ARM laptops) | `SpiceFix-linux-arm64` |
 
-## Usage notes
+## Windows
+
+Double-click `SpiceFix.exe`.
 
 - Run it as a **normal user**, not as administrator – the Spicetify installer refuses to run elevated.
-- Use the Spotify desktop app from [spotify.com](https://www.spotify.com/download/windows/), opened and logged in at least once.
-- Requires an internet connection; it downloads the official installers from Spicetify's GitHub.
+- The exe isn't code-signed, so SmartScreen may warn you. Click **More info → Run anyway**.
+- Use Spotify from [spotify.com](https://www.spotify.com/download/windows/). The **Microsoft Store** version can't be modified – SpiceFix will tell you if that's what you have.
+
+## Linux
+
+Open a terminal in the folder you downloaded it to and run:
+
+```sh
+chmod +x SpiceFix-linux-amd64
+./SpiceFix-linux-amd64
+```
+
+- **Don't use `sudo`.** SpiceFix asks for your password itself, only when it has to make Spotify's folder writable (Spotify updates reset this, so you may be asked again after one).
+- It needs `curl` or `wget` (preinstalled on nearly every distro).
+
+Supported Spotify installs, detected automatically:
+
+| Install | Typical distros | Folder |
+|---|---|---|
+| Official .deb repo | Ubuntu, Debian, Mint, Pop!_OS, Zorin | `/opt/spotify` or `/usr/share/spotify` |
+| AUR (`spotify`) | Arch, Manjaro, EndeavourOS, CachyOS | `/opt/spotify` |
+| negativo17 RPM | Fedora | `/usr/lib64/spotify-client` |
+| **Flatpak** (system or user) | Any distro – Fedora, openSUSE, Bazzite, SteamOS… | `…/flatpak/app/com.spotify.Client/…` |
+
+**Snap isn't supported** – Snap packages are read-only, so Spicetify can't modify them. If you have it, SpiceFix tells you how to switch:
+
+```sh
+sudo snap remove spotify
+flatpak install flathub com.spotify.Client
+```
+
+Open Spotify once and log in before running SpiceFix – Spicetify needs the settings file Spotify creates on first launch.
 
 ## Build it yourself
 
 ```sh
-# on Windows
-go build -ldflags "-s -w" -o SpiceFix.exe
-
-# from Linux / macOS
-GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" -o SpiceFix.exe
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" -o SpiceFix.exe
+CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags "-s -w" -o SpiceFix-linux-amd64
+CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags "-s -w" -o SpiceFix-linux-arm64
 ```
 
-Pushing a tag like `v1.0.0` builds the exe on GitHub Actions and attaches it to a release.
+Publishing a release on GitHub (or pushing a `v*` tag) builds all three on GitHub Actions and attaches them to the release.
 
 ## Disclaimer
 
