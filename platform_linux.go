@@ -146,6 +146,16 @@ func prepareApply(exe string) error {
 	return run(exe, args...)
 }
 
+// On Linux the official shell installers are used (they also handle PATH
+// for every shell); antivirus false positives aren't an issue there.
+const nativeInstaller = false
+
+func installCLI() error { return runInstaller("cli/main/install") }
+
+func installMarketplaceFiles(string) error {
+	return runInstaller("marketplace/main/resources/install")
+}
+
 // runInstaller runs <repoRaw>/<path>.sh from Spicetify's GitHub.
 func runInstaller(path string) error {
 	url := repoRaw + "/" + path + ".sh"

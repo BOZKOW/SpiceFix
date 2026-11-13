@@ -25,6 +25,9 @@ const (
 	repoRaw          = "https://raw.githubusercontent.com/spicetify"
 )
 
+// appVersion is set at build time with -ldflags "-X main.appVersion=…".
+var appVersion = "dev"
+
 var in = bufio.NewReader(os.Stdin)
 
 func main() {
@@ -119,16 +122,21 @@ func auto(exe, current, latest string) error {
 
 func install() error {
 	closeSpotify()
-	step("Running the official Spicetify installer…")
-	fmt.Println(dim("  (It may ask whether to install Marketplace – answer Y or N.)"))
-	if err := runInstaller("cli/main/install"); err != nil {
-		return fmt.Errorf("installer failed: %w", err)
+	step("Installing the latest Spicetify…")
+	if err := installCLI(); err != nil {
+		return fmt.Errorf("install failed: %w", err)
 	}
 	exe := findSpicetify()
 	if exe == "" {
-		return errors.New("installer finished but the spicetify program was not found")
+		return errors.New("install finished but the spicetify program was not found")
 	}
-	return fix(exe)
+	if err := fix(exe); err != nil {
+		return err
+	}
+	if nativeInstaller && confirm("\nAlso install Spicetify Marketplace (themes & extensions store)?") {
+		return installMarketplace()
+	}
+	return nil
 }
 
 func fix(exe string) error {
@@ -181,8 +189,8 @@ func update(exe string) error {
 	closeSpotify()
 	step("Updating Spicetify CLI…")
 	if err := run(exe, "upgrade"); err != nil {
-		warn("'spicetify upgrade' failed – reinstalling with the official installer.")
-		if err := runInstaller("cli/main/install"); err != nil {
+		warn("'spicetify upgrade' failed – downloading the latest version instead.")
+		if err := installCLI(); err != nil {
 			return fmt.Errorf("update failed: %w", err)
 		}
 		exe = findSpicetify()
@@ -200,7 +208,7 @@ func installMarketplace() error {
 		return err
 	}
 	step("Installing Spicetify Marketplace…")
-	if err := runInstaller("marketplace/main/resources/install"); err != nil {
+	if err := installMarketplaceFiles(exe); err != nil {
 		return fmt.Errorf("marketplace install failed: %w", err)
 	}
 	return nil
@@ -266,7 +274,7 @@ func banner() {
   \___ \| '_ \| |/ __/ _ \ |_  | \ \/ /
    ___) | |_) | | (_|  __/  _| | |>  <
   |____/| .__/|_|\___\___|_|   |_/_/\_\
-        |_|   install · fix · update Spicetify`))
+        |_|   install · fix · update Spicetify`) + dim("  v"+appVersion))
 }
 
 func ask(prompt, def string) string {
