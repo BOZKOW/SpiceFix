@@ -31,7 +31,7 @@ Get the right file from the [Releases](../../releases) page:
 
 Double-click `SpiceFix.exe`.
 
-- Run it as a **normal user**, not as administrator – the Spicetify installer refuses to run elevated.
+- Run it as a **normal user**, not as administrator, so Spicetify is set up for your account.
 - The exe isn't code-signed, so SmartScreen may warn you. Click **More info → Run anyway**.
 - SpiceFix downloads Spicetify's official release zip from GitHub and installs it itself, the same way the official installer does. It doesn't run PowerShell scripts. Older versions piped the official `install.ps1` into PowerShell, which Windows Defender flags as `Trojan:Win32/Commando.B!ml`.
 - Use Spotify from [spotify.com](https://www.spotify.com/download/windows/). The **Microsoft Store** version can't be modified – SpiceFix will tell you if that's what you have.
@@ -69,7 +69,7 @@ Open Spotify once and log in before running SpiceFix – Spicetify needs the set
 ## Build it yourself
 
 ```sh
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" -o SpiceFix.exe
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -o SpiceFix.exe
 CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags "-s -w" -o SpiceFix-linux-amd64
 CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags "-s -w" -o SpiceFix-linux-arm64
 ```
@@ -78,4 +78,4 @@ Each release also includes `SHA256SUMS.txt` so you can verify your download. Pub
 
 ## Disclaimer
 
-Not affiliated with Spicetify or Spotify. SpiceFix only runs Spicetify's own official installers and commands.
+Not affiliated with Spicetify or Spotify. SpiceFix only uses Spicetify's official releases, installers and commands.
